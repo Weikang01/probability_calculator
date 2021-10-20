@@ -1,12 +1,3 @@
-class Event
-{
-	constructor(value, probability)
-	{
-		this.value = value;
-		this.probability = probability;
-	}
-}
-
 function print(...args)
 {
 	console.log(...args);
@@ -37,14 +28,18 @@ function quick_Sort(origArray) {
 
 function __quartile(arr, num)
 {
-	let n = arr.length;
+	return (arr[Math.floor((a.length-1) * .25 * num)] + arr[Math.ceil((a.length-1) * .25 * num)]) * .5;
+}
 
-	let nex = Math.trunc((n+1)*.25*num)-1;
-	if (nex < 0)
-		return NAN;
-	let rem = (n+1)*.25*num-1 - nex;
-
-	return arr[nex]+(arr[nex+1]-arr[nex])*rem;
+/**
+ * param: 
+ * k: P(μ-kσ,μ+kσ)
+ */
+function chebyshev(k) {
+	return {
+		"Min. % within k standard deviations of mean": (1. - (1./(k*k)))*100.+"%",
+		"Max. % beyond k standard deviations of mean":(1./(k*k))*100.+"%"
+	};
 }
 
 function factorial(n)
@@ -93,7 +88,7 @@ function variance(arr)
 	return (sqx-(x*x/arr.length))/(arr.length-1);
 }
 
-function standarDev(arr)
+function standardDev(arr)
 {
 	return Math.sqrt(variance(arr));
 }
@@ -107,7 +102,7 @@ function gcd(a, b){
 }
 
 /**
- * 公式爲
+ * formula is
  * (n r) =
  * n!/(r!(n-r)!)
  */
@@ -213,27 +208,143 @@ function getUniformDitributionInfo(arr_of_values)
 	}
 }
 
-function getBernoulliDistributionInfo(possibility)
+class DiscreteDistribution
 {
-	return {
-		"mean(μ)":possibility,
-		"variance(σ^2)":possibility * (1.-possibility),
-		"standard deviation(σ)":Math.sqrt(possibility * (1.-possibility))
-	};
+	mean()
+	{
+		return 0;
+	}
+
+	variance()
+	{
+		return 0;
+	}
+
+	info()
+	{
+		let mu = this.mean();
+		let sd = Math.sqrt(this.variance());
+		return {
+			"mean(μ)":mu,
+			"variance(σ^2)":this.variance(),
+			"standard deviation(σ)":sd,
+			"[μ-σ,μ+σ]":[mu-sd,mu+sd],
+			"[μ-2σ,μ+2σ]":[mu-2*sd,mu+2*sd],
+		};
+	}
 }
 
-function getBinomialDistributionInfo(number, possibility)
+class BernoulliDistribution extends DiscreteDistribution
 {
-	return {
-		"mean(μ)":number * possibility,
-		"variance(σ^2)":number * possibility * (1.-possibility),
-		"standard deviation(σ)":Math.sqrt(number * possibility * (1.-possibility))
-	};
+	constructor(possibility)
+	{
+		super();
+		this.possibility = possibility;
+	}
+
+	probability(x)
+	{
+		return this.possibility;
+	}
+
+	mean()
+	{
+		return this.possibility;
+	}
+
+	variance()
+	{
+		return this.possibility * (1.-this.possibility);
+	}
 }
 
-function eventInBinomialDist(number, event_X, possibility)
+class BinomialDistribution extends DiscreteDistribution
 {
-	return combination(number, event_X)*Math.pow(possibility, event_X)*Math.pow(1.-possibility, number-event_X);
+	constructor(totalNr, possibility)
+	{
+		super();
+		this.totalNr = totalNr;
+		this.possibility = possibility;
+	}
+
+	probability(x)
+	{
+		return combination(this.totalNr, x)*Math.pow(this.possibility, x)*Math.pow(1.-this.possibility, this.totalNr-x);
+	}
+
+	mean()
+	{
+		return this.totalNr * this.possibility;
+	}
+
+	variance()
+	{
+		return this.totalNr * this.possibility * (1.-this.possibility);
+	}
 }
 
-print(eventInBinomialDist(8, 3, .5));
+class PoissonDistribution extends DiscreteDistribution
+{
+	constructor(lambda)
+	{
+		super();
+		this.lambda = lambda;
+	}
+
+	probability(x)
+	{
+		return (Math.pow(this.lambda, x)*Math.pow(Math.E, -this.lambda))/factorial(x);
+	}
+
+	mean()
+	{
+		return this.lambda;
+	}
+
+	variance()
+	{
+		return this.lambda;
+	}
+}
+
+class HypergeometricDistribution extends DiscreteDistribution
+{
+	/** 
+	** nrTotalElements: N
+	** nrSuccessInElements: r
+	** nrElementsDrawn: n
+	*/
+	constructor(nrTotalElements, nrSuccessInElements, nrElementsDrawn)
+	{
+		super();
+		this.N = nrTotalElements;
+		this.r = nrSuccessInElements;
+		this.n = nrElementsDrawn;
+	}
+
+	probability(nrSuccessDrawn)
+	{
+		return (combination(this.r, nrSuccessDrawn)*combination(this.N-this.r,this.n-nrSuccessDrawn))/combination(this.N, this.n);
+	}
+
+	mean()
+	{
+		return (this.n*this.r)/(this.N);
+	}
+
+	/**
+	** variance = [r(N-r)n(N-n)]/[N*N*(N-1)]
+	*/
+	variance()
+	{
+		return (this.r*(this.N-this.r)*this.n*(this.N-this.n))/(this.N*this.N*(this.N-1));
+	}
+
+	
+	availableRange()
+	{
+		return [Math.max(0, this.n-(this.N-this.r)), Math.min(this.r, this.n)];
+	}
+}
+
+var terms = require("./probability_terms.json");
