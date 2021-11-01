@@ -3,6 +3,31 @@ function print(...args)
 	console.log(...args);
 }
 
+function stringToArr(...strs) {
+	// sample input: "5.9 5.3 1.6 7.4 8.6 3.2 2.1", "4.0 7.3 8.4 5.9 6.7 4.5 6.3"
+	let ret = [];
+	for (let str of strs) {
+		ret.push(...str.split(" ").map(f => parseFloat(f)))
+	}
+	return ret;
+}
+
+function erf(x){
+    // erf(x) = 2/sqrt(pi) * integrate(from=0, to=x, e^-(t^2) ) dt
+    // with using Taylor expansion, 
+    //        = 2/sqrt(pi) * sigma(n=0 to +inf, ((-1)^n * x^(2n+1))/(n! * (2n+1)))
+    // calculationg n=0 to 50 bellow (note that inside sigma equals x when n = 0, and 50 may be enough)
+    var m = 1.00;
+    var s = 1.00;
+    var sum = x * 1.0;
+    for(var i = 1; i < 50; i++){
+        m *= i;
+        s *= -1;
+        sum += (s * Math.pow(x, 2.0 * i + 1.0)) / (m * (2.0 * i + 1.0));
+    }  
+    return 2 * sum / Math.sqrt(3.14159265358979);
+}
+
 function quick_Sort(origArray) {
 	if (origArray.length <= 1) { 
 		return origArray;
@@ -28,7 +53,7 @@ function quick_Sort(origArray) {
 
 function __quartile(arr, num)
 {
-	return (arr[Math.floor((a.length-1) * .25 * num)] + arr[Math.ceil((a.length-1) * .25 * num)]) * .5;
+	return (arr[Math.floor((arr.length-1) * .25 * num)] + arr[Math.ceil((arr.length-1) * .25 * num)]) * .5;
 }
 
 /**
@@ -147,6 +172,10 @@ function interQuartileRange(arr)
 	return upperQuartile(arr) - lowerQuartile(arr);
 }
 
+function IQRfromQLandQU(QL, QU) {
+	return QU-QL;
+}
+
 function getBoxplotParams(arr)
 {
 	let ql = lowerQuartile(arr);
@@ -190,6 +219,15 @@ function getArrayInfo(arr)
 	};
 }
 
+function zScore(value, arr)
+{
+	return (value - mean(arr))/standardDev(arr);
+}
+
+function zScore(value, mean, standardDev) {
+	return (value - mean)/standardDev;
+}
+
 function getUniformDitributionInfo(arr_of_values)
 {
 	let mu = 0;
@@ -208,7 +246,7 @@ function getUniformDitributionInfo(arr_of_values)
 	}
 }
 
-class DiscreteDistribution
+class Distribution
 {
 	mean()
 	{
@@ -234,7 +272,7 @@ class DiscreteDistribution
 	}
 }
 
-class BernoulliDistribution extends DiscreteDistribution
+class BernoulliDistribution extends Distribution
 {
 	constructor(possibility)
 	{
@@ -258,7 +296,7 @@ class BernoulliDistribution extends DiscreteDistribution
 	}
 }
 
-class BinomialDistribution extends DiscreteDistribution
+class BinomialDistribution extends Distribution
 {
 	constructor(totalNr, possibility)
 	{
@@ -283,7 +321,7 @@ class BinomialDistribution extends DiscreteDistribution
 	}
 }
 
-class PoissonDistribution extends DiscreteDistribution
+class PoissonDistribution extends Distribution
 {
 	constructor(lambda)
 	{
@@ -307,7 +345,7 @@ class PoissonDistribution extends DiscreteDistribution
 	}
 }
 
-class HypergeometricDistribution extends DiscreteDistribution
+class HypergeometricDistribution extends Distribution
 {
 	/** 
 	** nrTotalElements: N
@@ -347,4 +385,129 @@ class HypergeometricDistribution extends DiscreteDistribution
 	}
 }
 
-var terms = require("./probability_terms.json");
+class UniformDistribution extends Distribution
+{
+	constructor(from, to)
+	{
+		super();
+		this.c = from<to?from:to;
+		this.d = from<to?to:from;
+	}
+
+	mean()
+	{
+		return (this.c+this.d)/2;
+	}
+
+	variance()
+	{
+		return (this.d-this.c)/sqrt(12);
+	}
+
+	probability(from, to)
+	{
+		return (to-from)/(this.d-this.c);
+	}
+
+	probabilityFrom(from)
+	{
+		return this.probability(from, this.d);
+	}
+
+	probabilityTo(to)
+	{
+		return this.probability(this.c, to);
+	}
+}
+
+class NormalDistribution extends Distribution
+{
+	constructor(mean = 0., standardDeviation = 1.)
+	{
+		super();
+		this.mu = mean;
+		this.sigma = standardDeviation;
+	}
+
+	getStandardZ(z)
+	{
+		return (z-this.mu)/this.sigma;
+	}
+
+	getZFromStandardZ(prob)
+	{
+		return prob * this.sigma + this.mu;
+	}
+
+	probabilityTo(z)
+	{
+		z = this.getStandardZ(z);
+		return (erf(z/Math.sqrt(2))+1)/2;
+	}
+
+	probabilityFrom(z)
+	{
+		return 1. - this.probabilityTo(z);
+	}
+
+	probability(from, to)
+	{
+		return this.probabilityTo(to) - this.probabilityTo(from);
+	}
+
+	static isSuitableForNormalApproximation(n, p)
+	{
+		return n > Math.max(p/(1-p), (1-p)/p);
+	}
+
+	static approximateBinomialDist(n,p)
+	{
+		if (!NormalDistribution.isSuitableForNormalApproximation(n, p))
+			console.error("%c[ERROR]\nValue of n and p not suitable for normal approximation\nn <= max( p /(1 - p ), (1 - p )/ p )\n"+ n+ "<= max("+p+"/(1 -"+p+"), (1 -"+p+")/"+p+")", "color: red");
+		else
+			return new NormalDistribution(n*p, Math.sqrt(n*p*(1-p)));
+	}
+}
+
+class ExponentialDistribution extends Distribution
+{
+	constructor(theta)
+	{
+		super();
+		this.theta = theta;
+	}
+
+	mean()
+	{
+		return this.theta;
+	}
+
+	variance()
+	{
+		return this.theta * this.theta;
+	}
+
+	standardDeviation()
+	{
+		return this.theta;
+	}
+
+	probabilityFrom(to)
+	{
+		return Math.pow(Math.E, -to/this.theta);
+	}
+
+	probabilityTo(from)
+	{
+		return 1. - this.probabilityFrom(from);
+	}
+
+	probability(from, to)
+	{
+		return this.probabilityTo(to) - this.probabilityTo(from);
+	}
+}
+
+// var terms = require("./probability_terms.json");
+d = new ExponentialDistribution(23);
+print(d.probabilityTo(50));
