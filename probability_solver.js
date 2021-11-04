@@ -478,6 +478,7 @@ class NormalDistribution extends Distribution
 
 	static binomialApprox(k, comparison = COMPARISON.EQUAL)
 	{
+		// half-unit correction for continuity
 		switch (comparison) {
 			case COMPARISON.EQUAL:
 				return probability(k-.5, k+.5);
