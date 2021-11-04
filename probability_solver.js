@@ -1,3 +1,11 @@
+const COMPARISON = {
+	SMALLER:-2,
+	SMALLER_EQUAL:-1,
+	EQUAL:0,
+	GREATER_EQUAL:1,
+	GREATER:2,
+}
+
 function print(...args)
 {
 	console.log(...args);
@@ -467,7 +475,26 @@ class NormalDistribution extends Distribution
 		else
 			return new NormalDistribution(n*p, Math.sqrt(n*p*(1-p)));
 	}
+
+	static binomialApprox(k, comparison = COMPARISON.EQUAL)
+	{
+		switch (comparison) {
+			case COMPARISON.EQUAL:
+				return probability(k-.5, k+.5);
+			case COMPARISON.GREATER:
+				return probabilityFrom(k+.5);
+			case COMPARISON.SMALLER:
+				return probabilityTo(k-.5);
+			case COMPARISON.GREATER_EQUAL:
+				return probabilityFrom(k-.5);
+			case COMPARISON.SMALLER_EQUAL:
+				return probabilityTo(k+.5);
+			default:
+				throw ("[ERROR_INVALID_COMPARISON]: ", __LINE__);
+		}
+	}
 }
+
 
 class ExponentialDistribution extends Distribution
 {
@@ -509,5 +536,3 @@ class ExponentialDistribution extends Distribution
 }
 
 // var terms = require("./probability_terms.json");
-d = new ExponentialDistribution(23);
-print(d.probabilityTo(50));
