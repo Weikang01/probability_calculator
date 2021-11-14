@@ -83,12 +83,20 @@ function factorial(n)
 	return r;
 }
 
-function mean(arr)
+function mean_uni(arr)
 {
 	let r = 0;
 	for (let i = 0; i < arr.length;i++)
 		r += arr[i];
 	return r/arr.length;
+}
+
+function mean(x_arr, px_arr)
+{
+	let r = 0;
+	for (let i = 0; i < x_arr.length;i++)
+		r += x_arr[i] * px_arr[i];
+	return r;
 }
 
 function median(arr)
@@ -109,7 +117,7 @@ function range(arr)
 	return max - min;
 }
 
-function variance(arr)
+function variance_uni(arr)
 {
 	let sqx = 0;
 	let x = 0;
@@ -121,9 +129,55 @@ function variance(arr)
 	return (sqx-(x*x/arr.length))/(arr.length-1);
 }
 
-function standardDev(arr)
+function variance(x_arr, px_arr) {
+	let sqx = 0;
+	let x = 0;
+	for (let i = 0;i<x_arr.length;i++)
+	{
+		sqx += x_arr[i] * x_arr[i] * px_arr[i];
+		x += x_arr[i] * px_arr[i];
+	}
+	return sqx-x*x;
+}
+
+function standardDev_uni(arr)
 {
 	return Math.sqrt(variance(arr));
+}
+
+function standardDev(x_arr, px_arr) {
+	return Math.sqrt(variance(x_arr, px_arr));
+}
+
+function sampleMean_fromMean(mu) {
+	return mu;
+}
+
+function mean_fromSampleMean(muxbar) {
+	return muxbar;
+}
+
+function sampleVariance_fromVariance(sigma2, sizeOfSample)
+{
+	return sigma2 * sizeOfSample;
+}
+
+function Variance_fromSampleVariance(sigma2xbar, sizeOfSample)
+{
+	return sigma2xbar / sizeOfSample;
+}
+
+function standardDev_fromSampleStandardDev(sigma, sizeOfSample) {
+	return sigma * Math.sqrt(sizeOfSample);
+}
+
+function sampleStandardDev_fromStandardDev(sigmaxbar, sizeOfSample) {
+	return sigmaxbar / Math.sqrt(sizeOfSample);
+}
+
+function standardDev_fromSampleProportion(p, sizeOfSample)
+{
+	return Math.sqrt((p * (1-p))/sizeOfSample);
 }
 
 function gcd(a, b){
@@ -496,7 +550,6 @@ class NormalDistribution extends Distribution
 	}
 }
 
-
 class ExponentialDistribution extends Distribution
 {
 	constructor(theta)
@@ -536,4 +589,114 @@ class ExponentialDistribution extends Distribution
 	}
 }
 
+function recursiveCounter(x_arr, px_arr, epoch)
+{
+	if (epoch <= 1) {
+		let list_arr = [];
+		for (let i = 0; i < x_arr.length; i++)
+			list_arr.push([x_arr[i]]);
+
+		return [[...x_arr], [...px_arr], [...list_arr]];
+	}
+
+	var prev_arrs = recursiveCounter(x_arr, px_arr, epoch-1);
+	var prev_x_arr = prev_arrs[0];
+	var prev_px_arr = prev_arrs[1];
+	var prev_list_arr = prev_arrs[2];
+
+	var new_x_arr = new Array;
+	var new_px_arr = new Array;
+	var new_list_arr = new Array;
+	
+	for (let i = 0; i < x_arr.length; i ++)
+	{
+		for (let j = 0; j < prev_x_arr.length; j++) 
+		{
+			new_x_arr.push(x_arr[i] + prev_x_arr[j]);
+			new_px_arr.push(px_arr[i] * prev_px_arr[j]);
+
+			var new_list = [...prev_list_arr[j]];
+			new_list.push(x_arr[i]);
+			new_list.sort();
+			new_list_arr.push(new_list);
+		}
+	}
+	return [[...new_x_arr], [...new_px_arr], [...new_list_arr]];
+}
+
+function getSamplingDistributionOfSampleMeanFromProbabilityDistribution(x_arr, px_arr, sizeOfSample)
+{
+	// x_arr : (values of x)               [ 1,  2,  3,  4,  5]
+	// px_arr: (values of probability of x)[.2, .3, .2, .2, .1]
+	// sizeOfSample: 2
+	var values = recursiveCounter(x_arr, px_arr, sizeOfSample);
+	var xs = values[0];
+	var pxs = values[1];
+	var lists = values[2];
+
+	var final_x = new Array;
+	var final_px = new Array;
+	var counter = new Array;
+	var medians = new Array;
+	var p_medians = new Array;
+
+	for (let i = 0; i < xs.length; i++)
+	{
+		var cur_median = median(lists[i]);
+		if (medians.includes(cur_median))
+		{
+			var index = medians.indexOf(cur_median);
+			p_medians[index] += pxs[i];
+		}
+		else
+		{
+			medians.push(cur_median);
+			p_medians.push(pxs[i]);
+		}
+
+		if (final_x.includes(xs[i]))
+		{
+			var index = final_x.indexOf(xs[i]);
+			final_px[index] += pxs[i];
+			counter[index] ++;
+		}
+		else
+		{
+			final_x.push(xs[i]);
+			final_px.push(pxs[i]);
+			counter.push(1);
+		}
+	}
+
+	for (let i = 0; i < final_x.length; i++) {
+		final_x[i] /= sizeOfSample;
+	}
+
+	return [final_x, final_px, counter, medians, p_medians];
+}
+
 // var terms = require("./probability_terms.json");
+
+// console.log(mean([0,1,2], [1/3,1/3,1/3]));
+// console.log(variance([0,1,2], [1/3,1/3,1/3]));
+
+// var value = getSamplingDistributionOfSampleMeanFromProbabilityDistribution([0,1,2], [1/3,1/3,1/3],10);
+// var xs = value[0];
+// var pxs = value[1];
+
+// console.log(xs);
+// console.log(mean(xs, pxs));
+// console.log(variance(xs, pxs));
+
+// console.log(d.probabilityFrom(3.67));
+
+console.log(standardDev_fromSampleProportion(.67, 1000));
+var d = new NormalDistribution(.67, standardDev_fromSampleProportion(.67, 1000));
+
+console.log(d.probabilityTo(.62));
+
+// console.log(count);
+// console.log(mean(xs, pxs));
+// console.log(variance(xs, pxs));
+
+// console.log(mean([ 1,  2,  3,  4,  5], [.2, .3, .2, .2, .1]));
