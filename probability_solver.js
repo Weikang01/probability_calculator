@@ -1,3 +1,5 @@
+var { jStat } = require('jstat');
+
 const COMPARISON = {
 	SMALLER:-2,
 	SMALLER_EQUAL:-1,
@@ -83,6 +85,32 @@ function factorial(n)
 	return r;
 }
 
+function duplicateItems(arr = new Array)
+{
+	var len = arr.length;
+	var items = new Array;
+	var contains;
+	for (let i = 0; i < arr.length; i++) {
+		contains = false;
+		for (let j = 0; j < items.length; j++) {
+			if (items[j][0] == arr[i])
+			{
+				items[j][1] ++;
+				contains = true;
+				break;
+			}
+		}
+		if (!contains)
+		{
+			items.push([arr[i], 1, 0.0]);
+		}
+	}
+	for (let i = 0; i < items.length; i++) {
+		items[i][2] = items[i][1]/len;
+	}
+	return items;
+}
+
 function mean_uni(arr)
 {
 	let r = 0;
@@ -142,7 +170,7 @@ function variance(x_arr, px_arr) {
 
 function standardDev_uni(arr)
 {
-	return Math.sqrt(variance(arr));
+	return Math.sqrt(variance_uni(arr));
 }
 
 function standardDev(x_arr, px_arr) {
@@ -482,6 +510,11 @@ class UniformDistribution extends Distribution
 	}
 }
 
+function confidenceLevel_fromAlpha(alpha)
+{
+	return 1-alpha;
+}
+
 class NormalDistribution extends Distribution
 {
 	constructor(mean = 0., standardDeviation = 1.)
@@ -501,10 +534,15 @@ class NormalDistribution extends Distribution
 		return prob * this.sigma + this.mu;
 	}
 
+	static CDF(z)
+	{
+		return (erf(z/Math.sqrt(2))+1)/2;
+	}
+
 	probabilityTo(z)
 	{
 		z = this.getStandardZ(z);
-		return (erf(z/Math.sqrt(2))+1)/2;
+		return NormalDistribution.CDF(z);
 	}
 
 	probabilityFrom(z)
@@ -515,6 +553,44 @@ class NormalDistribution extends Distribution
 	probability(from, to)
 	{
 		return this.probabilityTo(to) - this.probabilityTo(from);
+	}
+
+	static inverseCDF(p)
+	{
+		var a1 = -39.6968302866538, a2 = 220.946098424521, a3 = -275.928510446969;
+		var a4 = 138.357751867269, a5 = -30.6647980661472, a6 = 2.50662827745924;
+		var b1 = -54.4760987982241, b2 = 161.585836858041, b3 = -155.698979859887;
+		var b4 = 66.8013118877197, b5 = -13.2806815528857, c1 = -7.78489400243029E-03;
+		var c2 = -0.322396458041136, c3 = -2.40075827716184, c4 = -2.54973253934373;
+		var c5 = 4.37466414146497, c6 = 2.93816398269878, d1 = 7.78469570904146E-03;
+		var d2 = 0.32246712907004, d3 = 2.445134137143, d4 = 3.75440866190742;
+		var p_low = 0.02425, p_high = 1 - p_low;
+		var q, r;
+		var retVal;
+	
+		if ((p < 0) || (p > 1))
+		{
+			alert("NormSInv: Argument out of range.");
+			retVal = 0;
+		}
+		else if (p < p_low)
+		{
+			q = Math.sqrt(-2 * Math.log(p));
+			retVal = (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) / ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
+		}
+		else if (p <= p_high)
+		{
+			q = p - 0.5;
+			r = q * q;
+			retVal = (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q / (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1);
+		}
+		else
+		{
+			q = Math.sqrt(-2 * Math.log(1 - p));
+			retVal = -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) / ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
+		}
+	
+		return retVal;
 	}
 
 	static isSuitableForNormalApproximation(n, p)
@@ -547,6 +623,54 @@ class NormalDistribution extends Distribution
 			default:
 				throw ("[ERROR_INVALID_COMPARISON]: ", __LINE__);
 		}
+	}
+
+	static ConfidenceLevel_fromZ_alphaOver2(Z_alphaOver2)
+	{
+		var r = 1. - 2. * (1. - NormalDistribution.CDF(Z_alphaOver2));
+		return Math.round(r*1000)/1000;
+	}
+
+	static Z_alphaOver2_fromConfidenceLevel(confidenceLevel)
+	{
+		var r = NormalDistribution.inverseCDF(1. - (1. - confidenceLevel) * .5);
+		return Math.round(r*1000)/1000;
+	}
+}
+
+class TDistribution extends Distribution
+{
+	constructor(degreeOfFreedom)
+	{
+		super();
+		this.df = degreeOfFreedom;
+	}
+
+	static inverseCDF(p, df)
+	{
+		var r = -jStat.studentt.inv(p, df);
+		return Math.abs(r) > 100? Math.round(r*100)/100:r>10?Math.round(r*1000)/1000:Math.round(r*1000)/1000;
+	}
+
+	static t_alphaOver2_fromConfidenceLevel_nrOfSample(confidenceLevel, nrOfSample)
+	{
+		console.log("t_alphaOver2 = t_" + (1. - confidenceLevel)*.5 + "\t dof = " + (nrOfSample - 1));
+		return TDistribution.inverseCDF((1. - confidenceLevel)*.5, nrOfSample-1);
+	}
+}
+
+class ChiSquareDistribution extends Distribution
+{
+	constructor(degreeOfFreedom)
+	{
+		super();
+		this.df = degreeOfFreedom;
+	}
+
+	static inverseCDF(p, df)
+	{
+		var r = jStat.chisquare.inv(1. - p, df);
+		return r > 100? Math.round(r * 100)/100: r>10?Math.round(r * 10000)/10000 : Math.round(r * 100000)/100000;
 	}
 }
 
@@ -675,6 +799,99 @@ function getSamplingDistributionOfSampleMeanFromProbabilityDistribution(x_arr, p
 	return [final_x, final_px, counter, medians, p_medians];
 }
 
+function getSamplingError(standardDev, sampleSize, confidenceLevel) {
+	var σ_sqrtN = standardDev / Math.sqrt(sampleSize);
+	var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+	console.log("SE = Z_alphaOver2 * σ_sqrtN = ");
+	return Z_alphaOver2 * σ_sqrtN;
+}
+
+function getSampleSize(standardDev, samplingError, confidenceLevel)
+{
+	var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+	console.log("n = (Z_alphaOver2 * Z_alphaOver2) * (standardDev * standardDev) / (samplingError * samplingError) = ");
+	return Z_alphaOver2 * Z_alphaOver2 * standardDev * standardDev / (samplingError * samplingError);
+}
+
+function getCI(xBar, standardDev, sampleSize, confidenceLevel)
+{
+	if (sampleSize >= 30)
+	{
+		var σ_sqrtN = standardDev / Math.sqrt(sampleSize);
+		var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+		return {
+			"σ_sqrtN": σ_sqrtN,
+			"Z_alphaOver2":Z_alphaOver2,
+			"xBar±Z_alphaOver2*σ_sqrtN": xBar + " ± " + Z_alphaOver2 + " * " + σ_sqrtN + " = " + xBar + " ± " + (Z_alphaOver2 * σ_sqrtN),
+			"interval": [xBar-Z_alphaOver2*σ_sqrtN,xBar+Z_alphaOver2*σ_sqrtN]
+		};
+	}
+	else
+	{
+		var σ_sqrtN = standardDev / Math.sqrt(sampleSize);
+		var t_alphaOver2 = TDistribution.t_alphaOver2_fromConfidenceLevel_nrOfSample(confidenceLevel, sampleSize);
+		return {
+			"σ_sqrtN": σ_sqrtN,
+			"t_alphaOver2":t_alphaOver2,
+			"xBar±t_alphaOver2*σ_sqrtN": xBar + " ± " + t_alphaOver2 + " * " + σ_sqrtN + " = " + xBar + " ± " + (t_alphaOver2 * σ_sqrtN),
+			"interval": [xBar-t_alphaOver2*σ_sqrtN,xBar+t_alphaOver2*σ_sqrtN]
+		};
+	}
+
+}
+
+function getSamplingError4PP(pHat, sampleSize, confidenceLevel) {
+	let qHat = 1. - pHat;
+	var sqrtpqOverN = Math.sqrt((pHat * qHat) / sampleSize);
+	var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+	console.log("SE = Z_alphaOver2 * sqrtpqOverN = ");
+	return Z_alphaOver2 * sqrtpqOverN;
+}
+
+function getSampleSize4PP(pHat, samplingError, confidenceLevel)
+{
+	let qHat = 1. - pHat;
+	var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+	console.log("n = (Z_alphaOver2 * Z_alphaOver2) * (pHat * qHat) / (samplingError * samplingError) = ");
+	return Z_alphaOver2 * Z_alphaOver2 * pHat * qHat / (samplingError * samplingError);
+}
+
+function getCI4PP(pHat, sampleSize, confidenceLevel)
+{
+	let qHat = 1. - pHat;
+	if (pHat * sampleSize >= 15 && qHat * sampleSize >= 15)
+	{
+		var sqrtpqOverN = Math.sqrt((pHat * qHat) / sampleSize);
+		var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+		return {
+			"sqrtpqOverN": sqrtpqOverN,
+			"Z_alphaOver2":Z_alphaOver2,
+			"pHat±Z_alphaOver2*sqrtpqOverN": pHat + " ± " + Z_alphaOver2 + " * " + sqrtpqOverN + " = " + pHat + " ± " + (Z_alphaOver2 * sqrtpqOverN),
+			"interval": [pHat-Z_alphaOver2*sqrtpqOverN,pHat+Z_alphaOver2*sqrtpqOverN]
+		};
+	}
+}
+
+function variance_chiSquare(sampleSize, sampleVariance, confidenceLevel)
+{
+	var alphaOver2 = (1. - confidenceLevel) * .5;
+	var x_alphaOver2 = ChiSquareDistribution.inverseCDF(alphaOver2, sampleSize-1);
+	var x_1minus_alphaOver2 = ChiSquareDistribution.inverseCDF(1. - alphaOver2, sampleSize-1);
+	var lowerBound = ((sampleSize-1) * sampleVariance)/x_alphaOver2;
+	var upperBound = ((sampleSize-1) * sampleVariance)/x_1minus_alphaOver2;
+
+	return {
+		"alphaOver2": alphaOver2,
+		"x_alphaOver2":x_alphaOver2,
+		"x_1minus_alphaOver2": x_1minus_alphaOver2,
+		"((n-1)s^2)/x^2_{a/2} <= sigma^2 <= ((n-1)s^2)/x^2_{1-a/2}": `((${alphaOver2}-1)${sampleVariance})/${x_alphaOver2} <= sigma^2 <= ((${alphaOver2}-1)${sampleVariance})/${x_1minus_alphaOver2}`,
+		"CI": [lowerBound, upperBound],
+		"standard dev CI": [Math.sqrt(lowerBound), Math.sqrt(upperBound)]
+	}
+}
+
+
+
 // var terms = require("./probability_terms.json");
 
 // console.log(mean([0,1,2], [1/3,1/3,1/3]));
@@ -690,13 +907,31 @@ function getSamplingDistributionOfSampleMeanFromProbabilityDistribution(x_arr, p
 
 // console.log(d.probabilityFrom(3.67));
 
-console.log(standardDev_fromSampleProportion(.67, 1000));
-var d = new NormalDistribution(.67, standardDev_fromSampleProportion(.67, 1000));
+// var d = new NormalDistribution();
 
-console.log(d.probabilityTo(.62));
+// console.log(d.probability(0, .25));
+
+// console.log(NormalDistribution.ConfidenceLevel_fromZ_alphaOver2(1.645));
+// console.log(getCI(25.9, 2.7, 90, .99));
 
 // console.log(count);
 // console.log(mean(xs, pxs));
 // console.log(variance(xs, pxs));
 
 // console.log(mean([ 1,  2,  3,  4,  5], [.2, .3, .2, .2, .1]));
+
+// console.log(TDistribution.inverseCDF(.005, 8));
+// console.log(TDistribution.inverseCDF(.95, 16));
+// console.log(TDistribution.inverseCDF(.95, 16));
+// console.log(TDistribution.inverseCDF(.95, 16));
+
+// console.log(getCI4PP(.76, 144, .9));
+// console.log(getSampleSize4PP(.2, .06, .95));
+// console.log(getSampleSize4PP(.5, .02, .95));
+// console.log(variance_chiSquare(144,141787,.95));
+// console.log(NormalDistribution.Z_alphaOver2_fromConfidenceLevel(.95));
+
+console.log(variance_chiSquare(50,2.5*2.5,.9));
+console.log(variance_chiSquare(15,.02*.02,.9));
+console.log(variance_chiSquare(22,31.6*31.6,.9));
+console.log(variance_chiSquare(5,1.5*1.5,.9));
