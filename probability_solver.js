@@ -813,6 +813,19 @@ function getSampleSize(standardDev, samplingError, confidenceLevel)
 	return Z_alphaOver2 * Z_alphaOver2 * standardDev * standardDev / (samplingError * samplingError);
 }
 
+function isSampleSizeLargeEnough(sampleSize, p, is_pHat)
+{
+	if (is_pHat)
+		return sampleSize > 15 * Math.max(1/p, 1/(1-p));
+	else
+		return sampleSize > Math.max(p/(1-p),(1-p)/p);
+}
+
+function standardDevFromRangeOfObservation(range)
+{
+	return range * .25;
+}
+
 function getCI(xBar, standardDev, sampleSize, confidenceLevel)
 {
 	if (sampleSize >= 30)
@@ -856,18 +869,27 @@ function getSampleSize4PP(pHat, samplingError, confidenceLevel)
 	return Z_alphaOver2 * Z_alphaOver2 * pHat * qHat / (samplingError * samplingError);
 }
 
+function getAdjustedP(nrOfSuccess, sampleSize)
+{
+	return (nrOfSuccess + 2)/(sampleSize + 4);
+}
+
 function getCI4PP(pHat, sampleSize, confidenceLevel)
 {
 	let qHat = 1. - pHat;
 	if (pHat * sampleSize >= 15 && qHat * sampleSize >= 15)
 	{
 		var sqrtpqOverN = Math.sqrt((pHat * qHat) / sampleSize);
+		var sqrtpqOvernplus4 = Math.sqrt((pHat * qHat) / (sampleSize + 4));
 		var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
+
 		return {
 			"sqrtpqOverN": sqrtpqOverN,
 			"Z_alphaOver2":Z_alphaOver2,
 			"pHat±Z_alphaOver2*sqrtpqOverN": pHat + " ± " + Z_alphaOver2 + " * " + sqrtpqOverN + " = " + pHat + " ± " + (Z_alphaOver2 * sqrtpqOverN),
-			"interval": [pHat-Z_alphaOver2*sqrtpqOverN,pHat+Z_alphaOver2*sqrtpqOverN]
+			"interval": [pHat-Z_alphaOver2*sqrtpqOverN,pHat+Z_alphaOver2*sqrtpqOverN],
+			"p~±Z_alphaOver2*sqrtpqOvernplus4": pHat + " ± " + Z_alphaOver2 + " * " + sqrtpqOvernplus4 + " = " + pHat + " ± " + (Z_alphaOver2 * sqrtpqOvernplus4),
+			"adjusted interval": [pHat-Z_alphaOver2*sqrtpqOvernplus4,pHat+Z_alphaOver2*sqrtpqOvernplus4]
 		};
 	}
 }
