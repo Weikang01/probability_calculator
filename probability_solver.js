@@ -869,6 +869,11 @@ function getSampleSize4PP(pHat, samplingError, confidenceLevel)
 	return Z_alphaOver2 * Z_alphaOver2 * pHat * qHat / (samplingError * samplingError);
 }
 
+function getSampleSize4PP_withoutP(samplingError, confidenceLevel)
+{
+	return getSampleSize4PP(.5, samplingError, confidenceLevel);
+}
+
 function getAdjustedP(nrOfSuccess, sampleSize)
 {
 	return (nrOfSuccess + 2)/(sampleSize + 4);
