@@ -145,7 +145,7 @@ function range(arr)
 	return max - min;
 }
 
-function variance_uni(arr)
+function variance_uni_samp(arr)
 {
 	let sqx = 0;
 	let x = 0;
@@ -155,6 +155,18 @@ function variance_uni(arr)
 		x += arr[i];
 	}
 	return (sqx-(x*x/arr.length))/(arr.length-1);
+}
+
+function variance_uni_pop(arr)
+{
+	let sqx = 0;
+	let x = 0;
+	for (let i = 0;i<arr.length;i++)
+	{
+		sqx += arr[i] * arr[i];
+		x += arr[i];
+	}
+	return (sqx-(x*x/arr.length))/(arr.length);
 }
 
 function variance(x_arr, px_arr) {
@@ -168,9 +180,14 @@ function variance(x_arr, px_arr) {
 	return sqx-x*x;
 }
 
-function standardDev_uni(arr)
+function standardDev_uni_samp(arr)
 {
-	return Math.sqrt(variance_uni(arr));
+	return Math.sqrt(variance_uni_samp(arr));
+}
+
+function standardDev_uni_pop(arr)
+{
+	return Math.sqrt(variance_uni_pop(arr));
 }
 
 function standardDev(x_arr, px_arr) {
@@ -195,12 +212,15 @@ function Variance_fromSampleVariance(sigma2xbar, sizeOfSample)
 	return sigma2xbar / sizeOfSample;
 }
 
-function standardDev_fromSampleStandardDev(sigma, sizeOfSample) {
-	return sigma * Math.sqrt(sizeOfSample);
+// AKA sample standard dev == standard error
+function standardDev_fromSampleStandardDev(sigmabar, sizeOfSample) {
+	return sigmabar * Math.sqrt(sizeOfSample);
 }
 
-function sampleStandardDev_fromStandardDev(sigmaxbar, sizeOfSample) {
-	return sigmaxbar / Math.sqrt(sizeOfSample);
+// AKA sample standard dev == standard error
+// s_{\bar{x}} = \frac{\sigma}{\sqrt{n}}
+function sampleStandardDev_fromStandardDev(sigma, sizeOfSample) {
+	return sigma / Math.sqrt(sizeOfSample);
 }
 
 function standardDev_fromSampleProportion(p, sizeOfSample)
@@ -413,10 +433,13 @@ class BinomialDistribution extends Distribution
 
 class PoissonDistribution extends Distribution
 {
-	constructor(lambda)
+	/*
+	lambda: Mean number of events during a given unit of time, area, volume, etc.
+	*/
+	constructor(lambda_AKA_mean)
 	{
 		super();
-		this.lambda = lambda;
+		this.lambda = lambda_AKA_mean;
 	}
 
 	probability(x)
@@ -438,6 +461,7 @@ class PoissonDistribution extends Distribution
 class HypergeometricDistribution extends Distribution
 {
 	/** 
+	 * Drawing n elements WITHOUT replacement
 	** nrTotalElements: N
 	** nrSuccessInElements: r
 	** nrElementsDrawn: n
@@ -536,7 +560,8 @@ class NormalDistribution extends Distribution
 
 	static CDF(z)
 	{
-		return (erf(z/Math.sqrt(2))+1)/2;
+		var r = (erf(z/Math.sqrt(2))+1)/2;
+		return Math.round(r*10000) * .0001;
 	}
 
 	probabilityTo(z)
@@ -595,7 +620,7 @@ class NormalDistribution extends Distribution
 
 	static isSuitableForNormalApproximation(n, p)
 	{
-		return n > Math.max(p/(1-p), (1-p)/p);
+		return n > 9 * Math.max(p/(1-p), (1-p)/p);
 	}
 
 	static approximateBinomialDist(n,p)
@@ -835,7 +860,8 @@ function getCI(xBar, standardDev, sampleSize, confidenceLevel)
 		return {
 			"σ_sqrtN": σ_sqrtN,
 			"Z_alphaOver2":Z_alphaOver2,
-			"xBar±Z_alphaOver2*σ_sqrtN": xBar + " ± " + Z_alphaOver2 + " * " + σ_sqrtN + " = " + xBar + " ± " + (Z_alphaOver2 * σ_sqrtN),
+			"xBar±Z_alphaOver2*σ_sqrtN": xBar + " ± " + Z_alphaOver2 + " * " + σ_sqrtN,
+			"result":xBar + " ± " + (Z_alphaOver2 * σ_sqrtN),
 			"interval": [xBar-Z_alphaOver2*σ_sqrtN,xBar+Z_alphaOver2*σ_sqrtN]
 		};
 	}
@@ -879,6 +905,25 @@ function getAdjustedP(nrOfSuccess, sampleSize)
 	return (nrOfSuccess + 2)/(sampleSize + 4);
 }
 
+function getMean4PP(pHat)
+{
+	return pHat;
+}
+
+function getSamplingMean(pHat)
+{
+	return pHat;
+}
+
+function getSamplingVariance(pHat, sampleSize) {
+	return (pHat * (1-pHat)) / sampleSize;
+}
+
+function getSamplingStandardDev(pHat, sampleSize)
+{
+	return Math.sqrt(getSamplingVariance(pHat, sampleSize));
+}
+
 function getCI4PP(pHat, sampleSize, confidenceLevel)
 {
 	let qHat = 1. - pHat;
@@ -917,6 +962,51 @@ function variance_chiSquare(sampleSize, sampleVariance, confidenceLevel)
 	}
 }
 
+function confidenceLevel2alpha(CL) {
+	var r = .5 * (1 - CL);
+	console.log("alpha: " + r);
+	return .5 * (1 - CL);
+}
+
+function get_z_fromAlpha(alpha)
+{
+	return NormalDistribution.CDF(alpha) - .5;
+}
+
+function get_z_fromConfidenceLevel(CL) {
+	return NormalDistribution.CDF(confidenceLevel2alpha(CL));
+}
+
+function get_degreeOfFreedom_fromSampleSize(sampleSize) {
+	return sampleSize - 1;
+}
+
+function get_t_fromAlpha(alpha, degreeOfFreedom) {
+	return TDistribution.inverseCDF(alpha, degreeOfFreedom);
+}
+
+function get_t_fromConfidenceLevel(CL, degreeOfFreedom) {
+	return TDistribution.inverseCDF(confidenceLevel2alpha(CL), degreeOfFreedom)
+}
+
+function get_chi_square_fromAlpha(alpha, degreeOfFreedom) {
+	return ChiSquareDistribution.inverseCDF(alpha, degreeOfFreedom);
+}
+
+function get_chi_square_fromConfidenceLevel(CL, degreeOfFreedom) {
+	var alpha = confidenceLevel2alpha(CL);
+	return {
+		"alpha1": alpha,
+		"x1": ChiSquareDistribution.inverseCDF(alpha, degreeOfFreedom),
+		"alpha2": 1-alpha,
+		"x2": ChiSquareDistribution.inverseCDF(1-alpha, degreeOfFreedom),
+	};
+}
+
+function get_probabilityDist_of_sample(popMean, popStandardDev, sampleSize)
+{
+	return new NormalDistribution(popMean, popStandardDev / Math.sqrt(sampleSize));
+}
 
 
 // var terms = require("./probability_terms.json");
@@ -958,7 +1048,11 @@ function variance_chiSquare(sampleSize, sampleVariance, confidenceLevel)
 // console.log(variance_chiSquare(144,141787,.95));
 // console.log(NormalDistribution.Z_alphaOver2_fromConfidenceLevel(.95));
 
-console.log(variance_chiSquare(50,2.5*2.5,.9));
-console.log(variance_chiSquare(15,.02*.02,.9));
-console.log(variance_chiSquare(22,31.6*31.6,.9));
-console.log(variance_chiSquare(5,1.5*1.5,.9));
+// console.log(variance_chiSquare(50,2.5*2.5,.9));
+// console.log(variance_chiSquare(15,.02*.02,.9));
+// console.log(variance_chiSquare(22,31.6*31.6,.9));
+// console.log(variance_chiSquare(5,1.5*1.5,.9));
+
+// Hypergeometric Distribution ===> drawing n elements WITHOUT replacement
+
+console.log(get_chi_square_fromConfidenceLevel(.9, get_degreeOfFreedom_fromSampleSize(17)));
