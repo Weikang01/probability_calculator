@@ -515,7 +515,7 @@ class UniformDistribution extends Distribution
 
 	variance()
 	{
-		return (this.d-this.c)/sqrt(12);
+		return ((this.d-this.c)*(this.d-this.c))/12;
 	}
 
 	probability(from, to)
@@ -968,6 +968,24 @@ function confidenceLevel2alpha(CL) {
 	return .5 * (1 - CL);
 }
 
+function get_mean_from_sampleProportion(pHat) {
+	return pHat;
+}
+
+
+function get_variance_from_sampleProportion(p, sampleSize) {
+	return (p * (1-p))/sampleSize;
+}
+
+function get_size_threshold_p_unknown(pHat) {
+	return 15 * Math.max(1/pHat, 1/(1-pHat));
+}
+
+function get_size_threshold_sampleProportion(p)
+{
+	return 9*Math.max(p/(1-p),(1-p)/p);
+}
+
 function get_z_fromAlpha(alpha)
 {
 	return NormalDistribution.CDF(alpha) - .5;
@@ -1008,51 +1026,7 @@ function get_probabilityDist_of_sample(popMean, popStandardDev, sampleSize)
 	return new NormalDistribution(popMean, popStandardDev / Math.sqrt(sampleSize));
 }
 
-
-// var terms = require("./probability_terms.json");
-
-// console.log(mean([0,1,2], [1/3,1/3,1/3]));
-// console.log(variance([0,1,2], [1/3,1/3,1/3]));
-
-// var value = getSamplingDistributionOfSampleMeanFromProbabilityDistribution([0,1,2], [1/3,1/3,1/3],10);
-// var xs = value[0];
-// var pxs = value[1];
-
-// console.log(xs);
-// console.log(mean(xs, pxs));
-// console.log(variance(xs, pxs));
-
-// console.log(d.probabilityFrom(3.67));
-
-// var d = new NormalDistribution();
-
-// console.log(d.probability(0, .25));
-
-// console.log(NormalDistribution.ConfidenceLevel_fromZ_alphaOver2(1.645));
-// console.log(getCI(25.9, 2.7, 90, .99));
-
-// console.log(count);
-// console.log(mean(xs, pxs));
-// console.log(variance(xs, pxs));
-
-// console.log(mean([ 1,  2,  3,  4,  5], [.2, .3, .2, .2, .1]));
-
-// console.log(TDistribution.inverseCDF(.005, 8));
-// console.log(TDistribution.inverseCDF(.95, 16));
-// console.log(TDistribution.inverseCDF(.95, 16));
-// console.log(TDistribution.inverseCDF(.95, 16));
-
-// console.log(getCI4PP(.76, 144, .9));
-// console.log(getSampleSize4PP(.2, .06, .95));
-// console.log(getSampleSize4PP(.5, .02, .95));
-// console.log(variance_chiSquare(144,141787,.95));
-// console.log(NormalDistribution.Z_alphaOver2_fromConfidenceLevel(.95));
-
-// console.log(variance_chiSquare(50,2.5*2.5,.9));
-// console.log(variance_chiSquare(15,.02*.02,.9));
-// console.log(variance_chiSquare(22,31.6*31.6,.9));
-// console.log(variance_chiSquare(5,1.5*1.5,.9));
-
 // Hypergeometric Distribution ===> drawing n elements WITHOUT replacement
 
-console.log(get_chi_square_fromConfidenceLevel(.9, get_degreeOfFreedom_fromSampleSize(17)));
+var d  = new ExponentialDistribution(15);
+console.log(d.probabilityFrom(45)/d.probabilityFrom(15))
