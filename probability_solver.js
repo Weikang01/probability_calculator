@@ -1,4 +1,10 @@
+const jstat = require('jstat');
 var { jStat } = require('jstat');
+
+function round(float, pos = 3)
+{
+	return Math.round(Math.pow(10, pos) * float)/ Math.pow(10, pos);
+}
 
 const COMPARISON = {
 	SMALLER:-2,
@@ -145,7 +151,7 @@ function range(arr)
 	return max - min;
 }
 
-function variance_uni_samp(arr)
+function variation(arr)
 {
 	let sqx = 0;
 	let x = 0;
@@ -154,19 +160,17 @@ function variance_uni_samp(arr)
 		sqx += arr[i] * arr[i];
 		x += arr[i];
 	}
-	return (sqx-(x*x/arr.length))/(arr.length-1);
+	return sqx-((x*x)/arr.length);
+}
+
+function variance_uni_samp(arr)
+{
+	return variation(arr)/(arr.length-1);
 }
 
 function variance_uni_pop(arr)
 {
-	let sqx = 0;
-	let x = 0;
-	for (let i = 0;i<arr.length;i++)
-	{
-		sqx += arr[i] * arr[i];
-		x += arr[i];
-	}
-	return (sqx-(x*x/arr.length))/(arr.length);
+	return variation(arr)/(arr.length);
 }
 
 function variance(x_arr, px_arr) {
@@ -671,6 +675,16 @@ class TDistribution extends Distribution
 		this.df = degreeOfFreedom;
 	}
 
+	static PDF(x, df)
+	{
+		return jStat.studentt.pdf(x, df);
+	}
+
+	static PDF_oneTailed(x, df)
+	{
+		return TDistribution.PDF(x, df) * .5;
+	}
+
 	static inverseCDF(p, df)
 	{
 		var r = -jStat.studentt.inv(p, df);
@@ -835,6 +849,7 @@ function getSampleSize(standardDev, samplingError, confidenceLevel)
 {
 	var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
 	console.log("n = (Z_alphaOver2 * Z_alphaOver2) * (standardDev * standardDev) / (samplingError * samplingError) = ");
+	console.log(`n = (${Z_alphaOver2} * ${Z_alphaOver2}) * (${standardDev} * ${standardDev}) / (${samplingError} * ${samplingError}) = `);
 	return Z_alphaOver2 * Z_alphaOver2 * standardDev * standardDev / (samplingError * samplingError);
 }
 
@@ -892,6 +907,7 @@ function getSampleSize4PP(pHat, samplingError, confidenceLevel)
 	let qHat = 1. - pHat;
 	var Z_alphaOver2 = NormalDistribution.Z_alphaOver2_fromConfidenceLevel(confidenceLevel);
 	console.log("n = (Z_alphaOver2 * Z_alphaOver2) * (pHat * qHat) / (samplingError * samplingError) = ");
+	console.log(`n = (${Z_alphaOver2} * ${Z_alphaOver2}) * (${pHat} * ${qHat}) / (${samplingError} * ${samplingError}) = `);
 	return Z_alphaOver2 * Z_alphaOver2 * pHat * qHat / (samplingError * samplingError);
 }
 
@@ -972,7 +988,6 @@ function get_mean_from_sampleProportion(pHat) {
 	return pHat;
 }
 
-
 function get_variance_from_sampleProportion(p, sampleSize) {
 	return (p * (1-p))/sampleSize;
 }
@@ -1026,7 +1041,393 @@ function get_probabilityDist_of_sample(popMean, popStandardDev, sampleSize)
 	return new NormalDistribution(popMean, popStandardDev / Math.sqrt(sampleSize));
 }
 
-// Hypergeometric Distribution ===> drawing n elements WITHOUT replacement
+function covariation(arr1, arr2)
+{
+	if (arr1.length != arr2.length)
+	{
+		console.log(`COVARIATION: length of ${arr1} and ${arr2} are difference`);
+		return;
+	}
+	var xy = 0, x = 0, y = 0;
+	for (let i = 0; i < arr1.length; i++) {
+		xy += arr1[i]*arr2[i];
+		x += arr1[i];
+		y += arr2[i];
+	}
+	return xy - (x*y)/arr1.length;
+}
 
-var d  = new ExponentialDistribution(15);
-console.log(d.probabilityFrom(45)/d.probabilityFrom(15))
+function __covaiance(arr1, arr2, n)
+{
+	if (typeof(arr1) == typeof([]) && typeof(arr2) == typeof([]))
+	{
+		return covariation(arr1, arr2)/n;
+	}
+	else
+	{
+		console.log(`COVARIANCE: ${arr1} and/or ${arr2} are/is not array`);
+		return;
+	}
+}
+
+function covaiance_pop(arr1, arr2)
+{
+	return __covaiance(arr1, arr2, arr1.length);
+}
+
+function covaiance_samp(arr1, arr2)
+{
+	return __covaiance(arr1, arr2, arr1.length-1);
+}
+
+function pearson_r(arr1, arr2)
+{
+	var cv = covariation(arr1, arr2);
+	var xv = variation(arr1);
+	var yv = variation(arr2);
+	console.log({
+		"covariation": cv,
+		"variation_x": xv,
+		"variation_y": yv
+	});
+	var r = covariation(arr1, arr2)/ Math.sqrt(variation(arr1)*variation(arr2));
+	console.log(`[${arr1}]\nand\n[${arr2}]\nhas ${r>0?"direct": r<0?"inverse":"no"} relationship`);
+	return r;
+}
+
+class LinearRegression
+{
+	sum_x()
+	{
+		var sum = 0;
+		for (let i = 0; i < this.x_arr.length; i++) {
+			sum += this.x_arr[i];
+		}
+		return sum;
+	}
+
+	sum_y()
+	{
+		var sum = 0;
+		for (let i = 0; i < this.y_arr.length; i++) {
+			sum += this.y_arr[i];
+		}
+		return sum;
+	}
+
+	estimate(x)
+	{
+		return this.intercept + this.slope * x;
+	}
+
+	total_predicted()
+	{
+		var ar = new Array(this.x_arr.length);
+		var sum = 0;
+		for (let i = 0; i < this.x_arr.length; i++) {
+			ar[i] = round(this.estimate(this.x_arr[i]), 3);
+			sum += ar[i];
+		}
+		return {
+			"total predicted":ar,
+			"sum":round(sum, 3)
+		};
+	}
+
+	constructor(x_arr, y_arr)
+	{
+		if (x_arr.length != y_arr.length)
+			throw("LINEAR REGRESSION: element array with different length!");
+		this.x_arr = x_arr;
+		this.y_arr = y_arr;
+		this.slope = covariation(x_arr, y_arr)/variation(x_arr);
+		this.intercept = mean_uni(y_arr) - this.slope * mean_uni(x_arr);
+		this.standardErrorOfEstimate = 0;
+		var r = 0;
+		var temp;
+		for (let i = 0; i < y_arr.length; i++) {
+			temp = y_arr[i] - this.estimate(x_arr[i]);
+			r += temp * temp;
+		}
+		this.standardErrorOfEstimate = round(Math.sqrt(r/(y_arr.length - 2)), 3);
+
+		console.log({
+			"slope = covariation_xy/variation_x = ": round(this.slope, 3),
+			"intercept = mean_y - slope * mean_x = " : round(this.intercept, 3),
+			"standard error of estimate (s_e) = sqrt(sum(y_i - y_est)^2/(n-2)) = ": this.standardErrorOfEstimate,
+			"trend line" : `y = ${this.intercept} + ${this.slope}x`
+		});
+	}
+
+	Pearson_r()
+	{
+		return pearson_r(this.x_arr, this.y_arr);
+	}
+
+	residual(ary_index)
+	{
+		var r = this.y_arr[ary_index] - this.estimate(this.x_arr[ary_index]);
+		console.log(`y_i - y_est = ${r}`);
+		console.log(`this is a ${r > 0? "over-estimate": r < 0? "under-estimate": "exact estimation"}`);
+		return r;
+	}
+
+	total_residual()
+	{
+		var ar = new Array(this.x_arr.length);
+		var sum = 0;
+		for (let i = 0; i < this.x_arr.length; i++) {
+			ar[i] = this.y_arr - this.estimate(this.x_arr[i]);
+			sum += ar[i];
+		}
+		return {
+			"total residual":ar,
+			"sum":round(sum, 3)
+		};
+	}
+
+	unexplained(ary_index)
+	{
+		var r = this.residual(ary_index);
+		r = r*r;
+		console.log(`(y_i - y_est)^2 = ${r}`);
+		return r;
+	}
+
+	total_unexplained()
+	{
+		var ar = new Array(this.x_arr.length);
+		var sum = 0;
+		var temp;
+		for (let i = 0; i < this.x_arr.length; i++) {
+			temp = this.y_arr[i] - this.estimate(this.x_arr[i]);
+			ar[i] = round(temp * temp, 4);
+			sum += ar[i];
+		}
+		return {
+			"total unexplained":ar,
+			"sum":round(sum, 3)
+		};
+	}
+
+	standardized_residual(ary_index)
+	{
+		var r = this.residual(ary_index)/this.standardErrorOfEstimate;
+		console.log(`standardized residual: (y_i - y_est)/S_e = ${r}`);
+		return r;
+	}
+
+	static getExplained(total, unexplained)
+	{
+		var explained = total - unexplained;
+		return {
+			"Total": total,
+			"Unexplained": unexplained,
+			"Explained = Total - Unexplained": explained,
+			"percentage of variation explained": round(explained/total*100, 4) + " %"
+		};
+	}
+
+	getExplained(total)
+	{
+		return total - this.unexplained();
+	}
+}
+
+function pooledVarianceEstimate(standardDev1, sampleSize1, standardDev2, sampleSize2)
+{
+	var s_p = Math.sqrt((standardDev1 * standardDev1 * (sampleSize1 -1) + standardDev2 * standardDev2 * (sampleSize2 -1))/(sampleSize1 + sampleSize2 - 2));
+	var sigma_xBar1_minus_xBar2 = s_p * Math.sqrt(1/sampleSize1+1/sampleSize2);
+	console.log(
+		{
+			"pooled standard deviation: s_p = sqrt of (s1^2(n1-1)+s2^2(n2-1))/(n1+n2-2)": round(s_p),
+			"standard error: sigma_{x1 mean - x2 mean} = s_p*sqrt(1/n1+1/n2)":round(sigma_xBar1_minus_xBar2),
+			"degree of freedom: n1+n2-2":sampleSize1+sampleSize2-2
+		}
+	);
+	return {
+		"s_p":s_p, "standardError":sigma_xBar1_minus_xBar2, "dof":sampleSize1+sampleSize2-2
+	};
+}
+
+function twoSampleStatistics_mean(sampleSize1, mean1, standardDev1, sampleSize2, mean2, standardDev2, hypothesizedDiff_between2PopMeans, levelOfConfidence=-1, alpha=-1)
+{
+	var res = pooledVarianceEstimate(standardDev1, sampleSize1, standardDev2, sampleSize2);
+	var standardError = res.standardError;
+	var dof = res.dof;
+
+	var t_star = ((mean1 - mean2) - hypothesizedDiff_between2PopMeans)/standardError;
+	var p_t = TDistribution.PDF(t_star, dof);
+
+	var alpha = alpha>=0?alpha:levelOfConfidence>=0?1-levelOfConfidence:-1;
+	console.log(
+		{
+			"Test Statistic: t* = ((x1 mean - x2 mean) - (mu1 - mu2))/(sigma_{x1 mean - x2 mean})": round(t_star),
+			"two-tailed p value":round(p_t, 4),
+			"one-tailed p value":round(p_t * .5, 4),
+			"confidence level": alpha>=0?1-alpha:"NAN",
+			"alpha": alpha>=0?alpha:"NAN",
+			"if (2_tailed)p-value>alpha, accept H0": alpha<0? "NAN":p_t>alpha?"accepted":"rejected",
+			"if (1_tailed)p-value>alpha, accept H0": alpha<0? "NAN":p_t*.5>alpha?"accepted":"rejected",
+		}
+
+	);
+	return t_star;
+}
+
+function twoSampleStatistics_mean_dependent(sum_x, sum_xsquared, sampleSize, hypothesizedDiff_between2PopMeans=0, levelOfConfidence=-1, alpha=-1)
+{
+	var s_d = Math.sqrt((sum_xsquared - (sum_x*sum_x)/sampleSize)/(sampleSize-1));
+	var sigma_d_mean = s_d/Math.sqrt(sampleSize);
+	var d_bar = sum_x / sampleSize;
+	var t_star = (d_bar-hypothesizedDiff_between2PopMeans)/sigma_d_mean;
+	var dof = sampleSize - 1;
+	var p_t = TDistribution.PDF(t_star, dof);
+	alpha = alpha>=0?alpha:levelOfConfidence>=0?1-levelOfConfidence:-1;
+	console.log(
+		{
+			"s_d: sqrt((sum(d^2) - sum(d)/n)/(n-1))":round(s_d),
+			"sigma_d_mean = s_d/sqrt(n)":round(sigma_d_mean),
+			"d_mean = sum(d)/n":round(d_bar),
+			"t* = (d_mean - d hypothesis)/sigma_d_mean": round(t_star),
+			"one-tailed p value: TDist.PDF(p_t)":round(p_t*.5, 4),
+			"two-tailed p value: 2TDist.PDF(p_t)":round(p_t, 4),
+			"confidence level": alpha>=0?1-alpha:"NAN",
+			"alpha": alpha>=0?alpha:"NAN",
+			"if (2_tailed)p-value>alpha, accept H0": alpha<0? "NAN":p_t>alpha?"accepted":"rejected",
+			"if (1_tailed)p-value>alpha, accept H0": alpha<0? "NAN":p_t*.5>alpha?"accepted":"rejected",
+		}
+	)
+}
+
+function mannWhitneyU(a_arr, b_arr, alpha = -1, levelOfConfidence=-1) {
+	var ordered = new Array(a_arr.length + b_arr.length);
+	var idx = new Array(a_arr.length + b_arr.length);
+	var group = new Array(a_arr.length + b_arr.length);
+	for (let i = 0; i < a_arr.length; i++) {
+		ordered[i] = a_arr[i];
+		idx[i] = i + 1;
+		group[i] = 0;
+	}
+	for (let i = 0; i < b_arr.length; i++) {
+		ordered[a_arr.length + i] = b_arr[i];
+		idx[a_arr.length + i] = a_arr.length + i + 1;
+		group[a_arr.length + i] = 1;
+	}
+
+
+	var temp_num, temp_grp;
+	for (let i = 0; i < ordered.length; i++)
+	{
+		for (let j = 0; j < ordered.length-i-1; j++)
+		{
+			if (ordered[j] > ordered[j+1])
+			{
+				temp_num = ordered[j];
+				ordered[j] = ordered[j+1];
+				ordered[j+1] = temp_num;
+	
+				temp_grp = group[j];
+				group[j] = group[j+1];
+				group[j+1] = temp_grp;
+			}
+		}
+	}
+
+	var last = "NAN";
+	var duplicated = 0;
+	var temp_idx;
+	
+	for (let i = 0; i < ordered.length; i++)
+	{
+		if (last == ordered[i])
+			duplicated++;
+		else if (duplicated != 0)
+		{
+			temp_idx = 0;
+			for (let j = 0; j <= duplicated; j++)
+				temp_idx += idx[i-j-1];
+			temp_idx /= (duplicated+1);
+			for (let j = 0; j <= duplicated; j++)
+				idx[i-j-1] = temp_idx;
+			duplicated = 0;
+		}
+		last = ordered[i];
+	}
+
+	var R1 = 0;
+	var R2 = 0;
+
+	for (let i = 0; i < idx.length; i++)
+	{
+		if (group[i] == 0)
+			R1 += idx[i];
+		else
+			R2 += idx[i];
+	}
+
+	var U1 = a_arr.length * b_arr.length + (a_arr.length * (a_arr.length + 1))*.5 - R1;
+	var U2 = a_arr.length * b_arr.length + (b_arr.length * (b_arr.length + 1))*.5 - R2;
+	var U = Math.min(U1, U2);
+
+	var mu_u = a_arr.length * b_arr.length * .5;
+	var sigma_u = Math.sqrt(a_arr.length * b_arr.length * (a_arr.length + b_arr.length + 1) / 12);
+	var z_score = (U - mu_u)/sigma_u;
+	var p_t = NormalDistribution.CDF(z_score);
+	alpha = alpha>=0?alpha:levelOfConfidence>=0?1-levelOfConfidence:-1;
+	console.log(
+		{
+			"R1":R1,
+			"R2":R2,
+			"U1 = n1n2 + (n1(n1+1))/2 - R1": U1,
+			"U2 = n1n2 + (n2(n2+1))/2 - R2": U2,
+			"Mann-Whitney U":U,
+			"mu_u = n1n2/2":round(mu_u,4),
+			"sigma_u = sqrt(n1n2(n1+n2+1)/12)":round(sigma_u,4),
+			"z score = (U - mu_u)/sigma_u":round(z_score, 4),
+			"one-tailed p value":p_t,
+			"two-tailed p value":2*p_t,
+			"confidence level": alpha>=0?1-alpha:"NAN",
+			"alpha": alpha>=0?alpha:"NAN",
+			"if (2_tailed)p-value>alpha, accept H0": alpha<0? "NAN":2*p_t>alpha?"accepted":"rejected",
+			"if (1_tailed)p-value>alpha, accept H0": alpha<0? "NAN":p_t>alpha?"accepted":"rejected",
+		}
+	)
+}
+
+function proportionStatistics(sampleSize1, p1, sampleSize2, p2, hypothesizedDiff_between2PopMeans=0, alpha = -1, levelOfConfidence=-1)
+{
+	var x1 = Math.round(sampleSize1 * p1);
+	var x2 = Math.round(sampleSize2 * p2);
+	var p_p = (x1+x2)/(sampleSize1+sampleSize2); 
+	var q_p = 1 - p_p;
+	var sigma_p1Minusp2 = Math.sqrt(p_p * q_p * (sampleSize1 + sampleSize2) / (sampleSize1*sampleSize2));
+	var z_star = (p1 - p2 - hypothesizedDiff_between2PopMeans)/sigma_p1Minusp2;
+	var p_t = 1-NormalDistribution.CDF(z_star);
+	alpha = alpha>=0?alpha:levelOfConfidence>=0?1-levelOfConfidence:-1;
+	console.log(
+		{
+			"x1":x1,
+			"x2":x2,
+			"p_p = (x1+x2)/(n1+n2)": round(p_p, 4),
+			"q_p = 1-p_p": round(q_p, 4),
+			"sigma_p1Minusp2 = sqrt(p_p*q_p(n1+n2)/n1n2)": round(sigma_p1Minusp2, 4),
+			"z * = ((p1-p2)- p hypothesis)/sigma_p1Minusp2": round(z_star),
+			"one-tailed p value":p_t,
+			"two-tailed p value":2*p_t,
+			"confidence level": alpha>=0?1-alpha:"NAN",
+			"alpha": alpha>=0?alpha:"NAN",
+			"if (2_tailed)p-value>alpha, accept H0": alpha<0? "NAN":2*p_t>alpha?"accepted":"rejected",
+			"if (1_tailed)p-value>alpha, accept H0": alpha<0? "NAN":p_t>alpha?"accepted":"rejected",
+		}
+	)
+}
+
+var a = [ 10.00 ,15.00 ,16.00 ,17.00 ,22.00 ,27.00 ,11.00 ,12.00 ,18.00 ,20.00];
+var b = [ 31.00 ,9.00 ,21.00 ,28.00 ,14.00 ,13.00 ,58.00 ,29.00 ,24.00 ,30.00 ];
+
+var _a = [3,4,2,6,2,5];
+var _b = [9,2,5,10,6,8];
+
+// proportionStatistics(310, 170/310, 225, 110/225, 0, 0.05);
+proportionStatistics(50, .5, 40, .3, 0, 0.05);
